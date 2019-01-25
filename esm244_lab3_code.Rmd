@@ -1,0 +1,116 @@
+---
+title: "ESM 244 - lab 3"
+author: "Sam Csik"
+date: "1/24/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###Part 0. Attach Packages
+```{r}
+library(tidyverse)
+library(boot)
+library(naniar)
+library(simputation)
+```
+
+###A. Bootstrapping penguin flipper length
+
+1. Get penguin data
+```{r}
+penguins <- read_csv("penguins.csv")
+
+male_p <- penguins %>% 
+  filter(sex == "MALE")
+
+# look at the distribution
+
+male_hist <- ggplot(male_p, aes(x = flipper_length)) +
+  geom_histogram(bins = 10) +
+  theme_light()
+
+flippers <- male_p %>% 
+  pull(flipper_length) # creates vector!
+```
+
+2. Create a function and do some bootstrapping
+```{r}
+# argument x (actual sample) and pseudo-argument i (the bootstrap number)
+mean_fun <- function(x,i) {mean(x[i])} # mean of x for sub-index i
+
+# set seed to keep randomness the same
+set.seed(10)
+
+# make variable to contain bootstrap
+boot_10 <- boot(flippers, mean_fun, R = 10)
+
+set.seed(10)
+boot(flippers, mean_fun, R = 10)
+
+# now increase number of bootstraps to 100
+boot_100 <- boot(flippers, mean_fun, R = 100)
+
+# plot sampling dist of bootstrap sample means
+ggplot() + # trick to plot
+  aes(boot_100$t) + # t = all mean values
+  geom_histogram()
+
+# increase again
+boot_10000 <- boot(flippers, mean_fun, R = 10000)
+
+ggplot() +
+  aes(boot_10000$t) +
+  geom_histogram()
+
+# If you up the bootstrap number to 100,000, does bias or st. error change? If not, you've likely reached convergence. You decide on convergence level!
+
+# Calculate the confidence interval using the boot.ci() function in the boot package
+boot.ci(boot_10000, conf = 0.95)
+
+
+# BOOTSTRAPPING IS OVERUSED; should be used as a backup to validate your data, not as a way to improve your results--results should be the same as the results obtained using just your data
+```
+
+
+###Evaluate missingness with naniar
+```{r}
+vis_miss(airquality) # not working??
+
+gg_miss_var(airquality, facet = Month) # gives counts of missing variables
+
+# Functions to work with ggplot:
+# geom_miss_point() to show missing data points (e.g. red values are where solar var is measured but no Ozone (jitter is just added))
+
+ggplot(airquality, aes(x = Ozone, y = Solar.R)) +
+  geom_miss_point()
+
+ggplot(airquality,
+       aes(x = Solar.R, y = Temp)) +
+  geom_miss_point() +
+  scale_color_manual(values = c("orange", "purple")) +
+  facet_wrap(~Month)
+
+# shadow matrix contains info about whether or not an observation is an NA and whether or not we can use that observation(??)
+
+# Create a shadow matrix (binary indicator for whether or not an observation was NA)
+na_shadow <- bind_shadow(airquality)
+
+# Imputation by linear regression; calculate NAs for missing Ozone and plotted as if they actually exist
+airquality %>% 
+  impute_lm(Ozone ~ Temp + Wind) %>% 
+  ggplot(aes(x = Temp, y = Ozone)) + 
+  geom_point()
+
+# use shadow matrix to color code which points were once NA (and have been imputed, blue) and which were not (orange)
+na_shadow %>%  
+  impute_lm(Ozone ~ Temp + Wind) %>% 
+  ggplot(aes(x = Temp, y = Ozone, color = Ozone_NA)) +
+  geom_point()
+
+```
+
